@@ -12,15 +12,17 @@ Runs in the background and kills the browser's CDM utility process before it tri
 
 ## Usage
 
-Run `nvbypass.exe` as Administrator.
+Run `nvbypass.exe` as Administrator. A tray icon will appear in the system tray (bottom-right). Right-click it for options:
+
+- **Show / Hide** — toggle the console window
+- **Auto-start** — toggle Windows startup
+- **Quit** — exit the program
 
 | Command | Description |
 |---|---|
-| `nvbypass.exe` | Run normally |
-| `nvbypass.exe --silent` | Run hidden in background |
+| `nvbypass.exe` | Run with console visible |
+| `nvbypass.exe --silent` | Run with console hidden |
 | `nvbypass.exe --autostart` | Toggle Windows startup |
-
-Or use `toggle_autostart.bat` to toggle startup.
 
 ## Supported browsers
 
