@@ -12,7 +12,7 @@ Runs in the background and kills the browser's CDM utility process before it tri
 
 ## Usage
 
-Run `nvbypass.exe` as Administrator. A tray icon will appear in the system tray (bottom-right). Right-click it for options:
+Run `nvbypass.exe` in a specific folder. A tray icon will appear in the system tray (bottom-right). Right-click it for options:
 
 - **Show / Hide** — toggle the console window
 - **Auto-start** — toggle Windows startup
