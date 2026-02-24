@@ -36,9 +36,61 @@ static pfnNtQIP pNtQIP = nullptr;
 
 static NOTIFYICONDATAA nid = {};
 static HWND g_hwnd = nullptr;
-static HWND g_console = nullptr;
+static HWND g_terminalWnd = nullptr;
 static bool g_consoleVisible = true;
 static bool g_running = true;
+
+static bool HasAutoStart();
+
+// ---- Console management ----
+
+static void CacheTerminalWindow()
+{
+    SetConsoleTitleA("NVIDIA ShadowPlay DRM Bypass");
+    Sleep(100);
+    g_terminalWnd = FindWindowA(nullptr, "NVIDIA ShadowPlay DRM Bypass");
+
+    if (!g_terminalWnd)
+        g_terminalWnd = GetConsoleWindow();
+}
+
+static void PrintBanner()
+{
+    printf("NVIDIA ShadowPlay DRM Bypass\n");
+    printf("Auto-start: %s (toggle with --autostart)\n", HasAutoStart() ? "ON" : "OFF");
+    printf("Monitoring CDM processes. Ctrl+C to quit.\n\n");
+}
+
+static void HideConsole()
+{
+    if (g_terminalWnd)
+        ShowWindow(g_terminalWnd, SW_HIDE);
+    else
+        FreeConsole();
+
+    g_consoleVisible = false;
+}
+
+static void ShowConsole()
+{
+    if (g_terminalWnd)
+    {
+        ShowWindow(g_terminalWnd, SW_SHOW);
+        SetForegroundWindow(g_terminalWnd);
+    }
+    else
+    {
+        AllocConsole();
+
+        FILE* fp;
+        freopen_s(&fp, "CONOUT$", "w", stdout);
+
+        CacheTerminalWindow();
+        PrintBanner();
+    }
+
+    g_consoleVisible = true;
+}
 
 // ---- Browsers ----
 
@@ -121,13 +173,11 @@ static bool ReadCmdLine(DWORD pid, wchar_t* out, size_t max)
 
 // ---- CDM killer ----
 
-static int KillCDM(bool log)
+static void KillCDM()
 {
-    int killed = 0;
-
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snap == INVALID_HANDLE_VALUE)
-        return 0;
+        return;
 
     PROCESSENTRY32W pe = {};
     pe.dwSize = sizeof(pe);
@@ -149,19 +199,13 @@ static int KillCDM(bool log)
             HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
             if (h)
             {
-                if (TerminateProcess(h, 0))
-                {
-                    killed++;
-                    if (log)
-                        printf("[kill] %ls (PID %lu)\n", pe.szExeFile, pe.th32ProcessID);
-                }
+                TerminateProcess(h, 0);
                 CloseHandle(h);
             }
         } while (Process32NextW(snap, &pe));
     }
 
     CloseHandle(snap);
-    return killed;
 }
 
 // ---- Auto-start ----
@@ -190,7 +234,6 @@ static void ToggleAutoStart()
         {
             RegDeleteValueA(k, REG_VALUE);
             RegCloseKey(k);
-            printf("Auto-start disabled.\n");
         }
     }
     else
@@ -203,7 +246,6 @@ static void ToggleAutoStart()
         {
             RegSetValueExA(k, REG_VALUE, 0, REG_SZ, (BYTE*)cmd, (DWORD)strlen(cmd) + 1);
             RegCloseKey(k);
-            printf("Auto-start enabled.\n");
         }
     }
 }
@@ -262,8 +304,10 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         switch (LOWORD(wp))
         {
         case ID_TRAY_SHOW:
-            g_consoleVisible = !g_consoleVisible;
-            ShowWindow(g_console, g_consoleVisible ? SW_SHOW : SW_HIDE);
+            if (g_consoleVisible)
+                HideConsole();
+            else
+                ShowConsole();
             break;
 
         case ID_TRAY_AUTO:
@@ -301,23 +345,11 @@ static HWND CreateMessageWindow()
 
 // ---- Worker thread ----
 
-static DWORD WINAPI WorkerThread(LPVOID param)
+static DWORD WINAPI WorkerThread(LPVOID)
 {
-    bool silent = *(bool*)param;
-    int total = 0;
-
     while (g_running)
     {
-        int k = KillCDM(!silent);
-
-        if (k > 0)
-        {
-            total += k;
-
-            if (!silent)
-                printf("Total: %d\n", total);
-        }
-
+        KillCDM();
         Sleep(CHECK_INTERVAL);
     }
 
@@ -329,8 +361,6 @@ static DWORD WINAPI WorkerThread(LPVOID param)
 int main(int argc, char** argv)
 {
     bool silent = false;
-
-    SetConsoleTitleA("NVIDIA ShadowPlay DRM Bypass");
 
     for (int i = 1; i < argc; i++)
     {
@@ -352,20 +382,16 @@ int main(int argc, char** argv)
     if (GetLastError() == ERROR_ALREADY_EXISTS)
         return 0;
 
-    g_console = GetConsoleWindow();
+    CacheTerminalWindow();
 
     if (silent)
     {
-        ShowWindow(g_console, SW_HIDE);
-        g_consoleVisible = false;
+        HideConsole();
         Sleep(BOOT_DELAY);
     }
-
-    if (!silent)
+    else
     {
-        printf("NVIDIA ShadowPlay DRM Bypass\n");
-        printf("Auto-start: %s (toggle with --autostart)\n", HasAutoStart() ? "ON" : "OFF");
-        printf("Monitoring CDM processes. Ctrl+C to quit.\n\n");
+        PrintBanner();
     }
 
     // Create tray icon
@@ -373,7 +399,7 @@ int main(int argc, char** argv)
     AddTrayIcon(g_hwnd);
 
     // Start worker thread
-    HANDLE hThread = CreateThread(nullptr, 0, WorkerThread, &silent, 0, nullptr);
+    HANDLE hThread = CreateThread(nullptr, 0, WorkerThread, nullptr, 0, nullptr);
 
     // Message loop
     MSG msg;
