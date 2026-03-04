@@ -383,15 +383,12 @@ int main(int argc, char** argv)
         return 0;
 
     CacheTerminalWindow();
+    PrintBanner();
 
     if (silent)
     {
         HideConsole();
         Sleep(BOOT_DELAY);
-    }
-    else
-    {
-        PrintBanner();
     }
 
     // Create tray icon
